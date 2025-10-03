@@ -1,0 +1,425 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>PyroGuard - Live Dashboard</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.1/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.3.0/dist/chart.umd.min.js"></script>
+  
+  <style>
+    /* --- COLOR PALETTE --- */
+    :root {
+      --bg-primary: #0B0E1F;
+      --bg-card: #1C213D;
+      --color-text: #E0E7FF;
+      --color-muted: #A8B3CF;
+      --color-danger: #FF5C77;
+      --color-warning: #FFC759;
+      --color-safe: #5BD1D7;
+    }
+    
+    body {
+      background-color: var(--bg-primary);
+      color: var(--color-text);
+      font-family: 'Inter', 'Segoe UI', Arial, sans-serif;
+      line-height: 1.6;
+    }
+
+    /* Navbar */
+    .navbar {
+      background: var(--bg-card);
+      border-bottom: 1px solid rgba(255,255,255,0.1);
+    }
+
+    .card {
+      background-color: var(--bg-card);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 10px;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+      transition: transform 0.3s ease, box-shadow 0.3s ease;
+    }
+    .card:hover {
+      transform: translateY(-3px);
+      box-shadow: 0 6px 18px rgba(0,0,0,0.3);
+    }
+
+    /* --- Animations --- */
+    .fade-in {
+      animation: fadeIn 0.8s ease-in-out;
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .smooth-update {
+      transition: color 0.3s ease, transform 0.3s ease;
+    }
+    .smooth-update:hover {
+      transform: scale(1.05);
+    }
+
+    /* Typography */
+    .header-status {
+      font-size: 2.2rem; 
+      font-weight: 700;
+      color: var(--color-text);
+      letter-spacing: 0.5px;
+    }
+    .video-title {
+      color: #FFFFFF !important;
+      font-weight: 700;
+      font-size: 1.25rem;
+    }
+    .sensor-value {
+      font-size: 1.6rem;
+      font-weight: 600;
+      margin-bottom: 0.1rem;
+      color: var(--color-text);
+    }
+    
+    /* Status LED */
+    .status-led {
+      width: 16px; 
+      height: 16px;
+      border-radius: 50%;
+      display: inline-block;
+      margin-right: 8px;
+    }
+    .led-safe { background: var(--color-safe); box-shadow: 0 0 12px var(--color-safe); }
+    .led-warning { background: var(--color-warning); box-shadow: 0 0 12px var(--color-warning); }
+    .led-fire { background: var(--color-danger); box-shadow: 0 0 18px var(--color-danger); animation: pulse 1s infinite alternate; }
+    
+    @keyframes pulse {
+      from { box-shadow: 0 0 10px var(--color-danger); opacity: 0.9; }
+      to { box-shadow: 0 0 25px var(--color-danger); opacity: 1; }
+    }
+
+    .small-muted { color: var(--color-muted); font-size: 0.85rem; }
+    
+    /* Control Buttons */
+    .control-btn-group .btn {
+      flex-grow: 1;
+      border-radius: 6px;
+      font-weight: 600;
+      transition: transform 0.2s ease, background-color 0.2s;
+    }
+    .control-btn-group .btn:hover {
+      transform: translateY(-2px);
+    }
+    .btn-danger { background-color: var(--color-danger); border-color: var(--color-danger); }
+    .btn-danger:hover { background-color: #e6526a; border-color: #e6526a; }
+    .btn-success { background-color: var(--color-safe); border-color: var(--color-safe); }
+    .btn-success:hover { background-color: #4dc2c8; border-color: #4dc2c8; }
+    
+    /* Log Area Enlarged */
+    pre#log {
+      height: 260px;
+      overflow: auto;
+      background: #080a18;
+      padding: 15px;
+      border-radius: 6px;
+      border: 1px solid rgba(255, 255, 255, 0.05);
+      font-size: 0.8rem;
+      line-height: 1.4;
+      color: var(--color-muted);
+    }
+
+    /* Video Feed Styling */
+    .video-container {
+      position: relative;
+    }
+    .video-container img {
+      border-radius: 8px;
+      display: block;
+      width: 100%;
+      height: auto;
+      border: 2px solid rgba(255, 255, 255, 0.1);
+      box-shadow: 0 0 15px rgba(0,0,0,0.4);
+    }
+    .video-overlay {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      background: rgba(0,0,0,0.6);
+      color: #fff;
+      padding: 6px 10px;
+      font-weight: 600;
+      font-size: 0.9rem;
+      text-align: center;
+      border-radius: 0 0 8px 8px;
+    }
+
+    /* Chart Styling */
+    .chart-container {
+      padding: 10px;
+    }
+  </style>
+</head>
+<body>
+  
+  <!-- Navbar -->
+  <nav class="navbar navbar-dark px-3">
+    <a class="navbar-brand fw-bold" href="#">
+      <img src="pyrologo.png" height="40" class="me-2"> PyroGuard
+    </a>
+    <button id="btnRefresh" class="btn btn-outline-light btn-sm"><i class="bi bi-arrow-clockwise me-1"></i> Refresh</button>
+  </nav>
+
+  <div class="container py-4 py-lg-5">
+    <div class="row g-4">
+      
+      <div class="col-lg-4">
+        
+        <!-- System Status -->
+        <div class="card p-4 mb-4 fade-in">
+          <div class="d-flex align-items-center mb-3">
+            <div id="statusLed" class="status-led led-safe me-3"></div>
+            <div class="small-muted fw-bold">SYSTEM STATUS</div>
+          </div>
+          <h2 id="statusText" class="header-status mb-3 text-uppercase smooth-update">Loading...</h2>
+          <span class="badge bg-success px-3 py-2" id="statusBadge">SAFE</span>
+
+          <div class="row g-3 my-4">
+            <div class="col-6">
+              <div class="small-muted"><i class="bi bi-thermometer-half me-1"></i> Temp</div>
+              <div id="tempVal" class="sensor-value smooth-update">-- °C</div>
+            </div>
+            <div class="col-6">
+              <div class="small-muted"><i class="bi bi-droplet-half me-1"></i> Humidity</div>
+              <div id="humVal" class="sensor-value smooth-update">-- %</div>
+            </div>
+            <div class="col-6">
+              <div class="small-muted"><i class="bi bi-cloud-haze-fill me-1"></i> Gas (MQ)</div>
+              <div id="gasVal" class="sensor-value smooth-update">--</div>
+            </div>
+            <div class="col-6">
+              <div class="small-muted"><i class="bi bi-fire me-1"></i> Flame IR</div>
+              <div id="fireVal" class="sensor-value smooth-update">--</div>
+            </div>
+          </div>
+          
+          <div class="d-flex gap-3 control-btn-group">
+            <button class="btn btn-danger" id="silenceBtn"><i class="bi bi-volume-mute-fill me-1"></i> Silence</button>
+            <button class="btn btn-success" id="resetBtn"><i class="bi bi-check-circle-fill me-1"></i> Reset</button>
+          </div>
+        </div>
+        
+        <!-- Threshold Control + Event Log -->
+        <div class="card p-3 fade-in">
+          <div class="d-flex justify-content-between align-items-center mb-2">
+            <div class="small-muted fw-bold"><i class="bi bi-list-columns-reverse me-1"></i> EVENT LOG</div>
+          </div>
+
+          <!-- Threshold Slider -->
+          <label for="thresholdSlider" class="small-muted">Temp Threshold:</label>
+          <input type="range" min="20" max="60" value="40" class="form-range" id="thresholdSlider">
+          <div class="small-muted mb-2">Selected: <span id="thresholdDisplay" style="color: var(--color-warning);">40°C</span></div>
+
+          <pre id="log">Initializing log...</pre>
+        </div>
+
+      </div>
+
+      <div class="col-lg-8">
+        
+        <!-- Video Feed -->
+        <div class="card p-3 mb-4 fade-in">
+          <div class="d-flex justify-content-between align-items-center mb-3">
+            <div>
+              <div class="small-muted fw-bold">AI CAMERA FEED</div>
+              <strong id="videoTitle" class="video-title">YOLOv5 Fire Detection</strong>
+            </div>
+            <div class="text-end">
+              <div class="small-muted">AI Status: <span id="aiVal" class="fw-bold">--</span></div>
+              <div class="small-muted mt-1">Final Decision: <span id="finalDecision" class="fw-bold smooth-update" style="color: var(--color-danger);">--</span></div>
+            </div>
+          </div>
+          
+          <div class="video-container fade-in">
+            <img src="http://YOUR_IP_ADDRESS:5000/video_feed" class="w-100" alt="Live Video Feed with AI Overlays">
+            <div class="video-overlay" id="videoOverlay">Awaiting Detection...</div>
+          </div>
+        </div>
+        
+        <!-- Charts -->
+        <div class="card p-3 fade-in">
+          <div class="row">
+            <div class="col-md-6 chart-container">
+              <div class="small-muted fw-bold mb-2">Temperature Trend (°C)</div>
+              <canvas id="tempChart" height="120"></canvas>
+            </div>
+            <div class="col-md-6 chart-container">
+              <div class="small-muted fw-bold mb-2">Gas Concentration Trend (Analog)</div>
+              <canvas id="gasChart" height="120"></canvas>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const API_URL = "YOUR_IP_ADDRESS:5000";
+    const POLL_INTERVAL_MS = 2000;
+    
+    // UI Element References
+    const tempVal = document.getElementById('tempVal');
+    const humVal = document.getElementById('humVal');
+    const gasVal = document.getElementById('gasVal');
+    const fireVal = document.getElementById('fireVal');
+    const aiVal = document.getElementById('aiVal');
+    const statusText = document.getElementById('statusText');
+    const statusLed = document.getElementById('statusLed');
+    const statusBadge = document.getElementById('statusBadge');
+    const finalDecision = document.getElementById('finalDecision');
+    const logPre = document.getElementById('log');
+    const thresholdSlider = document.getElementById('thresholdSlider');
+    const thresholdDisplay = document.getElementById('thresholdDisplay');
+    const videoOverlay = document.getElementById('videoOverlay');
+
+    // Chart Setup
+    const tempCtx = document.getElementById('tempChart').getContext('2d');
+    const gasCtx = document.getElementById('gasChart').getContext('2d');
+    const maxSamples = 30;
+    
+    const tempColor = '#FF5C77';
+    const gasColor = '#5BD1D7';
+    const gridColor = 'rgba(255, 255, 255, 0.08)';
+    const textColor = '#A8B3CF';
+
+    const chartOptions = {
+        animation: false,
+        responsive: true,
+        plugins: { legend: { display: false } },
+        scales: {
+            x: { ticks: { display: false, color: textColor }, grid: { color: gridColor } },
+            y: { ticks: { color: textColor }, grid: { color: gridColor } }
+        }
+    };
+    
+    const tempData = { labels: [], datasets: [{ label: 'Temp', data: [], borderColor: tempColor, tension: 0.4, borderWidth: 2, pointRadius: 3, fill: false }] };
+    const gasData = { labels: [], datasets: [{ label: 'Gas', data: [], borderColor: gasColor, tension: 0.4, borderWidth: 2, pointRadius: 3, fill: false }] };
+    
+    const tempChart = new Chart(tempCtx, { type: 'line', data: tempData, options: chartOptions });
+    const gasChart = new Chart(gasCtx, { type: 'line', data: gasData, options: chartOptions });
+
+    function pushSample(chartData, value) {
+        const t = new Date().toLocaleTimeString('en-US', { hour12: false, second: '2-digit', minute: '2-digit' });
+        chartData.labels.push(t);
+        chartData.datasets[0].data.push(value === null ? NaN : value);
+        if (chartData.labels.length > maxSamples) {
+            chartData.labels.shift();
+            chartData.datasets[0].data.shift();
+        }
+    }
+    function appendLog(line) {
+        const ts = new Date().toLocaleTimeString('en-US', { hour12: false });
+        logPre.textContent = `[${ts}] ${line}\n` + logPre.textContent;
+    }
+
+    async function pollData() {
+        try {
+            const dataResponse = await fetch(`${API_URL}/get_data`);
+            if (!dataResponse.ok) throw new Error('Data network response was not ok.');
+            const data = await dataResponse.json();
+
+            tempVal.textContent = `${data.temp}°C`;
+            humVal.textContent = `${data.hum}%`;
+            gasVal.textContent = data.gas;
+            fireVal.textContent = data.fire === 1 ? 'FLAME' : 'CLEAR';
+            aiVal.textContent = data.ai_status.toUpperCase();
+
+            pushSample(tempData, data.temp);
+            pushSample(gasData, data.gas);
+            tempChart.update();
+            gasChart.update();
+
+            // Threshold sync
+            thresholdSlider.value = data.temp_threshold;
+            thresholdDisplay.textContent = `${data.temp_threshold}°C`;
+
+            const statusResponse = await fetch(`${API_URL}/final_status`);
+            const status = await statusResponse.text();
+
+            statusText.textContent = status;
+            videoOverlay.textContent = `AI Decision: ${status}`;
+
+            // Update LED + Badge
+            if (status === 'FIRE') {
+                statusLed.className = 'status-led led-fire';
+                statusBadge.className = 'badge bg-danger px-3 py-2';
+                statusBadge.textContent = 'FIRE';
+            } else if (status === 'WARNING') {
+                statusLed.className = 'status-led led-warning';
+                statusBadge.className = 'badge bg-warning text-dark px-3 py-2';
+                statusBadge.textContent = 'WARNING';
+            } else {
+                statusLed.className = 'status-led led-safe';
+                statusBadge.className = 'badge bg-success px-3 py-2';
+                statusBadge.textContent = 'SAFE';
+            }
+
+            finalDecision.textContent = status;
+
+            const currentDecision = logPre.getAttribute('data-last-decision');
+            if (currentDecision !== status) {
+                if (status === 'FIRE') {
+                    appendLog('*** CRITICAL ALERT: FIRE CONFIRMED ***');
+                } else if (status === 'WARNING') {
+                    appendLog('SENSOR WARNING: Reviewing data...');
+                } else if (status === 'SAFE' && currentDecision && currentDecision !== 'Loading') {
+                    appendLog('System restored to SAFE status. All clear.');
+                }
+                logPre.setAttribute('data-last-decision', status);
+            }
+
+        } catch (error) {
+            console.error("Error fetching data:", error);
+            statusText.textContent = "SERVER DOWN";
+            statusLed.className = 'status-led led-fire';
+            statusBadge.className = 'badge bg-danger px-3 py-2';
+            statusBadge.textContent = 'OFFLINE';
+            appendLog('ERROR: Disconnected from Flask server.');
+        }
+    }
+
+    async function sendControlCommand(endpoint, command, value) {
+        try {
+            const response = await fetch(`${API_URL}/${endpoint}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ [command]: value })
+            });
+            if (!response.ok) throw new Error('Failed to send command');
+            appendLog(`CONTROL: Sent ${command} = ${value}`);
+        } catch (error) {
+            console.error(error);
+            appendLog(`ERROR: Control command failed.`);
+        }
+    }
+
+    // Polling
+    pollData();
+    setInterval(pollData, POLL_INTERVAL_MS);
+
+    // Button Events
+    document.getElementById('silenceBtn').addEventListener('click', () => sendControlCommand('control', 'silence', true));
+    document.getElementById('resetBtn').addEventListener('click', () => sendControlCommand('control', 'reset', true));
+    document.getElementById('btnRefresh').addEventListener('click', pollData);
+
+    thresholdSlider.addEventListener('input', (e) => {
+      thresholdDisplay.textContent = `${e.target.value}°C`;
+    });
+    thresholdSlider.addEventListener('change', (e) => {
+      sendControlCommand('set_threshold', 'threshold', e.target.value);
+    });
+  </script>
+
+</body>
+</html>
+
+
