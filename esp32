@@ -1,0 +1,181 @@
+
+#include <WiFi.h>
+#include <HTTPClient.h>
+#include <ArduinoJson.h>
+#include <DHT.h>
+
+// ===== Wi-Fi Credentials =====
+const char* ssid = "YOUR_WIFI_SSID";
+const char* password = "YOUR_WIFI_PASSWORD";
+
+// ===== Python Server Info =====
+const char* dataAddress = "YOUR_IP_ADDRESS:5000/data";
+const char* statusAddress = "YOUR_IP_ADDRESS:5000/final_status";
+const char* controlAddress = "YOUR_IP_ADDRESS:5000/control";
+const char* thresholdAddress = "YOUR_IP_ADDRESS:5000/set_threshold"; // New endpoint for threshold
+
+// ===== DHT11 Setup =====
+#define Dhtpin 4
+#define DHTTYPE DHT11
+DHT dht(Dhtpin, DHTTYPE);
+
+// ===== Sensors =====
+#define Mqpin 34
+#define Firepin 33
+
+// ===== Buzzer & Physical Button =====
+#define Buzzer 25
+#define AlertOffBtn 32
+
+// ===== Rotary Encoder =====
+#define CLK 14
+#define DT 27
+#define SW 26
+
+volatile int thresholdTemp = 32;
+volatile bool encoderChanged = false;
+int lastCLKState;
+unsigned long lastEncoderTime = 0;
+const unsigned long encoderDebounce = 5; // ms
+
+// ===== Timing =====
+unsigned long previousSensorTime = 0;
+const unsigned long sensorInterval = 2000; // 2 seconds
+
+// Function to send a boolean command
+void sendControlCommand(const char* command, bool value) {
+  HTTPClient http;
+  http.begin(controlAddress);
+  http.addHeader("Content-Type", "application/json");
+
+  DynamicJsonDocument doc(64);
+  doc[command] = value;
+  String payload;
+  serializeJson(doc, payload);
+
+  http.POST(payload);
+  http.end();
+}
+
+// Function to send the temperature threshold
+void sendThreshold() {
+  HTTPClient http;
+  http.begin(thresholdAddress);
+  http.addHeader("Content-Type", "application/json");
+  DynamicJsonDocument doc(64);
+  doc["temp_threshold"] = thresholdTemp;
+  String payload;
+  serializeJson(doc, payload);
+
+  http.POST(payload);
+  http.end();
+}
+
+void checkPhysicalButton() {
+  if (digitalRead(AlertOffBtn) == LOW) {
+    sendControlCommand("silence", true);
+    delay(200); // Debounce delay
+  }
+}
+
+// Rotary Encoder Interrupt
+void IRAM_ATTR updateEncoder() {
+  unsigned long now = millis();
+  if (now - lastEncoderTime > encoderDebounce) {
+    int currentCLK = digitalRead(CLK);
+    if (currentCLK != lastCLKState) {
+      if (digitalRead(DT) != currentCLK) thresholdTemp++;
+      else thresholdTemp--;
+      encoderChanged = true;
+    }
+    lastCLKState = currentCLK;
+    lastEncoderTime = now;
+  }
+}
+
+void setup() {
+  Serial.begin(115200);
+  dht.begin();
+  
+  // Pin setup
+  pinMode(Mqpin, INPUT);
+  pinMode(Firepin, INPUT);
+  pinMode(Buzzer, OUTPUT);
+  pinMode(AlertOffBtn, INPUT_PULLUP);
+  pinMode(CLK, INPUT);
+  pinMode(DT, INPUT);
+  pinMode(SW, INPUT_PULLUP);
+
+  lastCLKState = digitalRead(CLK);
+  attachInterrupt(digitalPinToInterrupt(CLK), updateEncoder, CHANGE);
+
+  WiFi.begin(ssid, password);
+  Serial.print("Connecting to WiFi");
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.print(".");
+  }
+  Serial.println("\nWiFi connected.");
+  Serial.print("IP Address: ");
+  Serial.println(WiFi.localIP());
+}
+
+void loop() {
+  unsigned long now = millis();
+  
+  checkPhysicalButton();
+
+  // Check if encoder value has changed and send to server
+  if (encoderChanged) {
+    sendThreshold();
+    encoderChanged = false;
+  }
+
+  // Reset threshold via encoder button
+  if (digitalRead(SW) == LOW) {
+      thresholdTemp = 32;
+      sendThreshold();
+      delay(500); // debounce
+  }
+
+  if (now - previousSensorTime >= sensorInterval) {
+    previousSensorTime = now;
+
+    HTTPClient httpPost;
+    httpPost.begin(dataAddress);
+    httpPost.addHeader("Content-Type", "application/json");
+    DynamicJsonDocument sensorDoc(256);
+    sensorDoc["temp"] = dht.readTemperature();
+    sensorDoc["hum"] = dht.readHumidity();
+    sensorDoc["gas"] = analogRead(Mqpin);
+    sensorDoc["fire"] = digitalRead(Firepin);
+    String sensorPayload;
+    serializeJson(sensorDoc, sensorPayload);
+    httpPost.POST(sensorPayload);
+    httpPost.end();
+
+    HTTPClient statusGet;
+    statusGet.begin(statusAddress);
+    int statusResponseCode = statusGet.GET();
+    if (statusResponseCode > 0) {
+      String payload = statusGet.getString();
+      
+      HTTPClient controlGet;
+      controlGet.begin(controlAddress);
+      controlGet.GET();
+      String controlPayload = controlGet.getString();
+      controlGet.end();
+
+      DynamicJsonDocument controlDoc(64);
+      deserializeJson(controlDoc, controlPayload);
+      bool isSilenced = controlDoc["silence"];
+
+      if (payload.indexOf("FIRE") != -1 && !isSilenced) {
+        digitalWrite(Buzzer, HIGH);
+      } else {
+        digitalWrite(Buzzer, LOW);
+      }
+    }
+    statusGet.end();
+  }
+}
