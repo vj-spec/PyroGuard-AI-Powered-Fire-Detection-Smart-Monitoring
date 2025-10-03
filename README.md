@@ -1,6 +1,7 @@
 # 🔥 PyroGuard
 
 **A smart AI + IoT-based fire and temperature monitoring system that combines real-time AI fire detection, IoT sensors, and a live dashboard for reliable safety monitoring.**
+
 *👩‍💻 Developed by Vishali T & Vijaya Pradhap S V*
 
 ---
