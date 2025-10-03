@@ -1,0 +1,131 @@
+
+import torch
+import cv2
+from flask import Flask, render_template, request, jsonify, Response
+from threading import Thread
+import json
+
+# ===== Flask App Setup =====
+app = Flask(__name__)
+
+# ===== YOLOv5 Model =====
+model = torch.hub.load('ultralytics/yolov5', 'custom', path=r'D:\mini_project\fire_win.pt', source='github')
+
+# ===== Global Data Storage =====
+sensor_data = {'temp': 0, 'hum': 0, 'gas': 0, 'fire': 0}
+ai_status = 'no fire'
+camera = None
+
+control_data = {
+    'silence': False,
+    'temp_threshold': 32
+}
+
+GAS_THRESHOLD = 2000
+
+def get_camera():
+    global camera
+    if camera is None:
+        camera = cv2.VideoCapture(0) 
+        if not camera.isOpened():
+            print("Error: Could not open video stream from camera.")
+    return camera
+
+def generate_frames():
+    global ai_status
+    camera = get_camera()
+    while True:
+        success, frame = camera.read()
+        if not success:
+            print("Failed to get frame.")
+            break
+        
+        results = model(frame)
+        fire_detected = False
+        for *box, conf, cls in results.xyxy[0]:
+            if int(cls) == 0:
+                fire_detected = True
+                break
+        
+        ai_status = 'fire' if fire_detected else 'no fire'
+        annotated_frame = results.render()[0]
+        
+        ret, buffer = cv2.imencode('.jpg', annotated_frame)
+        frame_bytes = buffer.tobytes()
+
+        yield (b'--frame\r\n'
+               b'Content-Type: image/jpeg\r\n\r\n' + frame_bytes + b'\r\n')
+
+@app.route('/')
+def home():
+    return render_template('dashboard.html')
+
+@app.route('/video_feed')
+def video_feed():
+    return Response(generate_frames(), mimetype='multipart/x-mixed-replace; boundary=frame')
+
+@app.route('/data', methods=['POST'])
+def receive_data():
+    global sensor_data
+    if request.method == 'POST':
+        data = request.get_json()
+        if data:
+            sensor_data = data
+            return jsonify({'status': 'success'}), 200
+    return jsonify({'status': 'error'}), 400
+
+@app.route('/get_data', methods=['GET'])
+def get_data():
+    global ai_status, sensor_data, control_data
+    combined_data = {
+        'temp': sensor_data['temp'],
+        'hum': sensor_data['hum'],
+        'gas': sensor_data['gas'],
+        'fire': sensor_data['fire'],
+        'ai_status': ai_status,
+        'temp_threshold': control_data['temp_threshold'] 
+    }
+    return jsonify(combined_data)
+
+@app.route('/final_status', methods=['GET'])
+def final_status():
+    global sensor_data, ai_status, control_data
+    
+    temp_warning = sensor_data['temp'] > control_data['temp_threshold']
+    gas_warning = sensor_data['gas'] > GAS_THRESHOLD
+    flame_warning = sensor_data['fire'] == 1
+    ai_warning = ai_status == 'fire'
+    
+    if (ai_warning and (temp_warning or gas_warning or flame_warning)) or (gas_warning and flame_warning):
+        return "FIRE"
+    elif temp_warning or gas_warning or flame_warning or ai_warning:
+        return "WARNING"
+    else:
+        return "SAFE"
+
+@app.route('/control', methods=['POST', 'GET'])
+def control():
+    global control_data
+    if request.method == 'POST':
+        data = request.get_json()
+        if 'silence' in data:
+            control_data['silence'] = data['silence']
+        return jsonify({'status': 'success'})
+    elif request.method == 'GET':
+        return jsonify(control_data)
+        
+@app.route('/set_threshold', methods=['POST']) 
+def set_threshold():
+    global control_data
+    data = request.get_json()
+    if 'temp_threshold' in data:
+        control_data['temp_threshold'] = data['temp_threshold']
+        return jsonify({'status': 'success'})
+    return jsonify({'status': 'error'})
+
+if __name__ == '__main__':
+    from threading import Thread
+    ai_thread = Thread(target=generate_frames, daemon=True)
+    app.run(host='0.0.0.0', port=5000, debug=True)
+
+    
