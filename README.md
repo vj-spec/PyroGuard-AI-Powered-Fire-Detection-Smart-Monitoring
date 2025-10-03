@@ -1,7 +1,7 @@
 # 🔥 PyroGuard
 
-**AI-Powered Fire & Temperature Monitoring System**
-*By Vishali T & Vijaya Pradhap S V*
+**A smart AI + IoT-based fire and temperature monitoring system that combines real-time AI fire detection, IoT sensors, and a live dashboard for reliable safety monitoring.**
+*👩‍💻 Developed by Vishali T & Vijaya Pradhap S V*
 
 ---
 
@@ -25,7 +25,7 @@ It integrates **YOLOv5-based AI fire detection** with **ESP32 temperature sensin
 ## 🏗 System Architecture
 
 ```
-ESP32 (Sensor + Encoder)
+ESP32 (Sensor + Rotary Encoder)
         ↓
    Flask Backend (YOLOv5 + API)
         ↓
@@ -53,7 +53,6 @@ pyroguard/
 ├── docs/                   # Reports, posters, documentation
 │   └── mini_project_report.pdf
 │
-├── LICENSE
 └── README.md
 ```
 
@@ -64,7 +63,7 @@ pyroguard/
 ### 🔧 Prerequisites
 
 * Python 3.8+
-* ESP32 with Arduino IDE / PlatformIO
+* ESP32 with Arduino IDE
 * Flask, Torch, OpenCV, requests
 * Pretrained YOLOv5 fire detection model (`fire_win.pt`)
 
@@ -104,7 +103,7 @@ pyroguard/
 
 ## 📊 Demo
 
-(Add screenshots, circuit images, or demo video links here)
+
 
 ---
 
@@ -112,13 +111,6 @@ pyroguard/
 
 * **Vishali T**
 * **Vijaya Pradhap S V**
-
----
-
-## 📜 License
-
-This project is licensed under the **MIT License** – feel free to use, modify, and distribute.
-
 ---
 
 ## ⭐ Acknowledgements
