@@ -240,7 +240,7 @@
           </div>
           
           <div class="video-container fade-in">
-            <img src="http://YOUR_IP_ADDRESS:5000/video_feed" class="w-100" alt="Live Video Feed with AI Overlays">
+            <img src="http://192.168.1.4:5000/video_feed" class="w-100" alt="Live Video Feed with AI Overlays">
             <div class="video-overlay" id="videoOverlay">Awaiting Detection...</div>
           </div>
         </div>
@@ -263,7 +263,7 @@
   </div>
 
   <script>
-    const API_URL = "YOUR_IP_ADDRESS:5000";
+    const API_URL = "http://192.168.1.4:5000";
     const POLL_INTERVAL_MS = 2000;
     
     // UI Element References
@@ -408,7 +408,7 @@
 
     // Button Events
     document.getElementById('silenceBtn').addEventListener('click', () => sendControlCommand('control', 'silence', true));
-    document.getElementById('resetBtn').addEventListener('click', () => sendControlCommand('control', 'reset', true));
+    document.getElementById('resetBtn').addEventListener('click', () => sendControlCommand('control', 'silence', false));
     document.getElementById('btnRefresh').addEventListener('click', pollData);
 
     thresholdSlider.addEventListener('input', (e) => {
@@ -421,5 +421,7 @@
 
 </body>
 </html>
+
+
 
 
